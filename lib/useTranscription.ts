@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { TranscriptionEngine, TranscriptionError } from "@/lib/transcription/types";
 import { WebSpeechEngine } from "@/lib/transcription/web-speech";
 
@@ -29,37 +29,55 @@ export function useTranscription({
   onFinalTranscript,
   engineFactory,
 }: UseTranscriptionOptions = {}): UseTranscriptionState {
-  const engine = useMemo(
-    () => (engineFactory ? engineFactory() : new WebSpeechEngine()),
-    [engineFactory],
-  );
+  const engineRef = useRef<TranscriptionEngine | null>(null);
 
   const onFinalRef = useRef<typeof onFinalTranscript>(onFinalTranscript);
   useEffect(() => {
     onFinalRef.current = onFinalTranscript;
   }, [onFinalTranscript]);
 
-  const [isSupported, setIsSupported] = useState<boolean>(() =>
-    engine.isSupported(),
-  );
+  const [isSupported, setIsSupported] = useState<boolean>(false);
   const [isListening, setIsListening] = useState<boolean>(false);
   const [error, setError] = useState<TranscriptionError | null>(null);
 
   useEffect(() => {
-    setIsSupported(engine.isSupported());
     return () => {
-      engine.dispose();
+      engineRef.current?.dispose();
+      engineRef.current = null;
     };
-  }, [engine]);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      setIsSupported(false);
+      return;
+    }
+    const engine =
+      engineFactory?.() ?? engineRef.current ?? new WebSpeechEngine(window);
+    engineRef.current = engine;
+    setIsSupported(engine.isSupported());
+  }, [engineFactory]);
 
   const stop = useCallback(() => {
-    engine.stop();
+    engineRef.current?.stop();
     setIsListening(false);
-  }, [engine]);
+  }, []);
 
   const start = useCallback(() => {
+    if (typeof window === "undefined") {
+      setError({ error: "not-supported", message: "window is not available" });
+      setIsListening(false);
+      setIsSupported(false);
+      return;
+    }
+
+    if (!engineRef.current) {
+      engineRef.current = engineFactory?.() ?? new WebSpeechEngine(window);
+      setIsSupported(engineRef.current.isSupported());
+    }
+
     setError(null);
-    engine.start({
+    engineRef.current.start({
       lang,
       continuous,
       interimResults,
@@ -72,7 +90,7 @@ export function useTranscription({
       },
       onFinalTranscript: (t) => onFinalRef.current?.(t),
     });
-  }, [continuous, engine, interimResults, lang, maxAlternatives]);
+  }, [continuous, engineFactory, interimResults, lang, maxAlternatives]);
 
   return { isSupported, isListening, error, start, stop };
 }

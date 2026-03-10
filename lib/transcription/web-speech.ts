@@ -4,7 +4,10 @@ import type {
   TranscriptionStartOptions,
 } from "./types";
 
-function getSpeechRecognitionCtor(w: Window): SpeechRecognitionConstructor | null {
+function getSpeechRecognitionCtor(
+  w: Window | undefined,
+): SpeechRecognitionConstructor | null {
+  if (!w) return null;
   return (w.SpeechRecognition ?? w.webkitSpeechRecognition) ?? null;
 }
 
@@ -13,7 +16,7 @@ export class WebSpeechEngine implements TranscriptionEngine {
   private stopRequested = false;
   private listening = false;
 
-  constructor(private readonly w: Window = window) {}
+  constructor(private readonly w?: Window) {}
 
   isSupported(): boolean {
     return getSpeechRecognitionCtor(this.w) != null;
