@@ -6,8 +6,17 @@ import {
   normalizeTimerSeconds,
   pickLetterPair,
 } from "@/lib/game";
+import { useTranscription } from "@/lib/useTranscription";
+import { isDictionaryWord } from "@/lib/words/dictionary";
+import { classifyDictionaryWordForPair } from "@/lib/words/classify";
+import { transcriptToNormalizedWords } from "@/lib/words/normalize";
 
 type Phase = "idle" | "running" | "finished";
+
+type RecognizedWord = {
+  word: string;
+  kind: "green" | "red";
+};
 
 export function LetterTimerGame() {
   const [phase, setPhase] = useState<Phase>("idle");
@@ -17,6 +26,7 @@ export function LetterTimerGame() {
   const [secondsLeft, setSecondsLeft] = useState<number>(DEFAULT_TIMER_SECONDS);
   const [startLetter, setStartLetter] = useState<string | null>(null);
   const [endLetter, setEndLetter] = useState<string | null>(null);
+  const [recognizedWords, setRecognizedWords] = useState<RecognizedWord[]>([]);
 
   const canEditTimer = phase !== "running";
   const canStart = phase === "idle";
@@ -25,6 +35,32 @@ export function LetterTimerGame() {
     if (phase === "idle") return normalizeTimerSeconds(timerInput);
     return secondsLeft;
   }, [phase, secondsLeft, timerInput]);
+
+  const { isSupported, isListening, error, start, stop } = useTranscription({
+    onFinalTranscript: (t) => {
+      if (!startLetter || !endLetter) return;
+      const tokens = transcriptToNormalizedWords(t);
+      if (tokens.length === 0) return;
+
+      setRecognizedWords((prev) => {
+        const seen = new Set(prev.map((w) => w.word));
+        const next = [...prev];
+
+        for (const word of tokens) {
+          if (seen.has(word)) continue;
+          if (!isDictionaryWord(word)) continue;
+          const kind = classifyDictionaryWordForPair({
+            word,
+            startLetter,
+            endLetter,
+          });
+          next.push({ word, kind });
+          seen.add(word);
+        }
+        return next;
+      });
+    },
+  });
 
   useEffect(() => {
     if (phase !== "running") return;
@@ -45,6 +81,10 @@ export function LetterTimerGame() {
     };
   }, [phase]);
 
+  useEffect(() => {
+    if (phase === "finished") stop();
+  }, [phase, stop]);
+
   function onStart() {
     if (!canStart) return;
     const seconds = normalizeTimerSeconds(timerInput);
@@ -52,19 +92,23 @@ export function LetterTimerGame() {
 
     setStartLetter(pair.startLetter);
     setEndLetter(pair.endLetter);
+    setRecognizedWords([]);
     setSecondsLeft(seconds);
     setPhase("running");
   }
 
   function onReset() {
+    stop();
     setPhase("idle");
     setTimerInput(String(DEFAULT_TIMER_SECONDS));
     setSecondsLeft(DEFAULT_TIMER_SECONDS);
     setStartLetter(null);
     setEndLetter(null);
+    setRecognizedWords([]);
   }
 
   const isZero = phase === "finished" && secondsLeft === 0;
+  const canUseMic = Boolean(startLetter && endLetter && phase === "running");
 
   return (
     <div className="w-full max-w-lg">
@@ -87,6 +131,20 @@ export function LetterTimerGame() {
               className="rounded-full bg-white px-5 py-2 text-sm font-semibold text-black transition enabled:hover:translate-y-[-1px] enabled:hover:bg-white/90 disabled:opacity-50"
             >
               Start
+            </button>
+            <button
+              type="button"
+              onClick={() => (isListening ? stop() : start())}
+              disabled={!isSupported || !canUseMic}
+              className={[
+                "rounded-full border px-5 py-2 text-sm font-semibold transition disabled:opacity-50",
+                isListening
+                  ? "border-emerald-400/40 bg-emerald-500/20 text-emerald-50 hover:bg-emerald-500/25"
+                  : "border-white/30 bg-white/5 text-white hover:bg-white/10",
+              ].join(" ")}
+              aria-pressed={isListening}
+            >
+              {isListening ? "Stop mic" : "Mic"}
             </button>
             <button
               type="button"
@@ -155,6 +213,46 @@ export function LetterTimerGame() {
             a letter pair.
           </div>
         )}
+
+        <div className="mt-4 flex items-center justify-between gap-3 text-xs text-white/60">
+          <div>
+            {!isSupported ? (
+              <span>Mic not supported in this browser.</span>
+            ) : isListening ? (
+              <span className="font-semibold text-white/80">Listening…</span>
+            ) : (
+              <span>Mic ready.</span>
+            )}
+          </div>
+          {error ? (
+            <div className="rounded-full border border-rose-400/30 bg-rose-500/15 px-3 py-1 text-rose-100">
+              Mic error: {error.error}
+            </div>
+          ) : null}
+        </div>
+
+        {recognizedWords.length > 0 ? (
+          <div className="mt-5">
+            <div className="text-xs font-semibold tracking-wide text-white/70">
+              Recognized
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {recognizedWords.map((w) => (
+                <span
+                  key={w.word}
+                  className={[
+                    "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold tracking-wide",
+                    w.kind === "green"
+                      ? "border-emerald-400/40 bg-emerald-500/20 text-emerald-50"
+                      : "border-rose-400/40 bg-rose-500/20 text-rose-50",
+                  ].join(" ")}
+                >
+                  {w.word}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
