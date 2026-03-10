@@ -97,6 +97,9 @@ describe("LetterTimerGame", () => {
 
     const red = screen.getByText("apple");
     expect(red.className).toMatch(/rose/i);
+
+    expect(screen.getByTestId("score-right")).toHaveTextContent("Right: 1");
+    expect(screen.getByTestId("score-wrong")).toHaveTextContent("Wrong: 1");
   });
 });
 

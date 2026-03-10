@@ -109,6 +109,15 @@ export function LetterTimerGame() {
 
   const isZero = phase === "finished" && secondsLeft === 0;
   const canUseMic = Boolean(startLetter && endLetter && phase === "running");
+  const { rightCount, wrongCount } = useMemo(() => {
+    let right = 0;
+    let wrong = 0;
+    for (const w of recognizedWords) {
+      if (w.kind === "green") right++;
+      else wrong++;
+    }
+    return { rightCount: right, wrongCount: wrong };
+  }, [recognizedWords]);
 
   return (
     <div className="w-full max-w-lg">
@@ -250,6 +259,21 @@ export function LetterTimerGame() {
                   {w.word}
                 </span>
               ))}
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold tracking-wide">
+              <span
+                data-testid="score-right"
+                className="inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/15 px-3 py-1 text-emerald-50"
+              >
+                Right: {rightCount}
+              </span>
+              <span
+                data-testid="score-wrong"
+                className="inline-flex items-center rounded-full border border-rose-400/40 bg-rose-500/15 px-3 py-1 text-rose-50"
+              >
+                Wrong: {wrongCount}
+              </span>
             </div>
           </div>
         ) : null}
