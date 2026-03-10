@@ -26,9 +26,19 @@ describe("pickLetterPair", () => {
 
   it("is deterministic with a deterministic rng", () => {
     let i = 0;
-    const seq = [0.0, 0.0];
+    // Under weighted sampling, 0.0 selects "A".
+    // The second 0.0 would also select "A" and must be rejected.
+    // 0.5 selects "L" with the chosen weights (cumulative crosses ~49.99 at "L").
+    const seq = [0.0, 0.0, 0.5];
     const rng = () => seq[i++] ?? 0.0;
-    expect(pickLetterPair(rng)).toEqual({ startLetter: "A", endLetter: "B" });
+    expect(pickLetterPair(rng)).toEqual({ startLetter: "A", endLetter: "L" });
+  });
+
+  it("does not hang when rng repeats start letter", () => {
+    let i = 0;
+    const seq = Array.from({ length: 50 }, () => 0.0).concat([0.5]);
+    const rng = () => seq[i++] ?? 0.5;
+    expect(pickLetterPair(rng)).toEqual({ startLetter: "A", endLetter: "L" });
   });
 });
 
